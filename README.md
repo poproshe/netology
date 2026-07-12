@@ -22,26 +22,13 @@ defaults
     timeout client 50000
     timeout server 50000
 
-# Задание 2: HTTP, Weighted Round Robin, ACL по домену example.local
-frontend http_front
-    bind :8088
-    mode http
-    acl is_example_local hdr(host) -i example.local
-    use_backend weighted_servers if is_example_local
-    default_backend no_service
-
-backend weighted_servers
-    mode http
+# Задание 1: TCP-балансировка Round-robin
+listen tcp_balancer
+    bind :8080
+    mode tcp
     balance roundrobin
-    option httpchk
-    http-check send meth GET uri /
-    server s1 127.0.0.1:8001 weight=2 check
-    server s2 127.0.0.1:8002 weight=3 check
-    server s3 127.0.0.1:8003 weight=4 check
-
-backend no_service
-    mode http
-    # пустой бэкенд — будет возвращать 503
+    server s1 127.0.0.1:8888 check inter 3s
+    server s2 127.0.0.1:9999 check inter 3s
 ....
 ```
 ![задание1](https://github.com/poproshe/zabbix-1/blob/main/img/%D0%A1%D0%BD%D0%B8%D0%BC%D0%BE%D0%BA%20%D1%8D%D0%BA%D1%80%D0%B0%D0%BD%D0%B0%202026-07-12%20160928.png)
