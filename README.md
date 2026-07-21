@@ -1,105 +1,77 @@
-# Домашнее задание к занятию  «Отказоустойчивость в облаке»
+# Домашнее задание к занятию  «Базы данных, их типы»
 # - Ушаков Игорь Юрьевич
 
-### Задание 1
-```
-terraform {
-  required_providers {
-    yandex = {
-      source = "yandex-cloud/yandex"
-    }
-  }
-}
+### Задание 1. СУБД
 
-provider "yandex" {
-  zone = "ru-central1-a"
-}
+1.1. Бюджетирование и фин. аналитика лучше всего реляционная (SQL).
+Потому, что в ней: ACID-гарантии, жесткая схема, сложные аналитические запросы. Подойдет PostgreSQL.
+1.1. Ускорение хеширования: Использовать API с аппаратным ускорением: Intel ISA-L или OpenSSL с NI-инструкциями процессора.
 
-resource "yandex_vpc_network" "net" {
-  name = "my-net"
-}
+1.2. Лендинги и CRM
+Тип: Документо-ориентированная NoSQL, например: MongoDB.
+Потому, что: Гибкость схемы (частые изменения полей), горизонтальное масштабирование, высокая скорость записи/чтения.
 
-resource "yandex_vpc_subnet" "sub" {
-  name           = "my-sub"
-  zone           = "ru-central1-a"
-  network_id     = yandex_vpc_network.net.id
-  v4_cidr_blocks = ["10.10.0.0/24"]
-}
+1.3. База знаний (нормы и правила)
 
-resource "yandex_compute_instance" "web" {
-  count = 2
-  name  = "web-${count.index + 1}"
+Нужна  иерархическая структура внутри реляционной или документной БД.
+Ее данные имеют древовидную структуру (отдел → подотдел → документ).
 
-  platform_id = "standard-v3"
-  resources {
-    cores  = 2
-    memory = 2
-  }
+Можно применить MongoDB (вложенные документы) или SQL с parent_id.
 
-  boot_disk {
-    initialize_params {
-      image_id = "fd80m2h15krph9b36mfg"
-      size     = 20
-    }
-  }
+1.3. Использовать существующую*
 
-  network_interface {
-    subnet_id = yandex_vpc_subnet.sub.id
-    nat       = true
-  }
+Если исользовать PostgreSQL, то создать таблицу с полями id, parent_id (ссылка на себя) и content. Для выборки дерева использовать рекурсивные CTE.
 
-  metadata = {
-    user-data = <<-EOF
-      #cloud-config
-      packages:
-        - nginx
-      runcmd:
-        - systemctl start nginx
-    EOF
-  }
-}
+1.4. Логистика (маршруты)
 
-resource "yandex_lb_target_group" "tg" {
-  name = "my-tg"
+Используем графовую СУБД.
+Это  оптимальный поиск путей и работа со связями — нативная функциональность графов.
+Используем Neo4j.
 
-  dynamic "target" {
-    for_each = yandex_compute_instance.web
-    content {
-      subnet_id = yandex_vpc_subnet.sub.id
-      address   = target.value.network_interface[0].ip_address
-    }
-  }
-}
+1.4. Подключение закупок*
 
-resource "yandex_lb_network_load_balancer" "lb" {
-  name = "my-lb"
+Тогда разделить. Логистика — графовая БД. Закупки — реляционная (цены, контрагенты). Связать через брокер сообщений (Kafka).
 
-  listener {
-    name = "listener"
-    port = 80
-    external_address_spec {
-      ip_version = "ipv4"
-    }
-  }
 
-  attached_target_group {
-    target_group_id = yandex_lb_target_group.tg.id
+### Задание 2. Транзакции
+2.1. Пополнение баланса (6 шагов)
+BEGIN транзакции.
+Проверка остатка и резервирование суммы.
+Списание средств с карты/кошелька.
+Отправка API-запроса оператору связи.
+Зачисление суммы на номер в биллинге оператора.
+Если успешно — COMMIT; если ошибка — ROLLBACK.
 
-    healthcheck {
-      name = "http"
-      http_options {
-        port = 80
-        path = "/"
-      }
-    }
-  }
-}
+2.1. Автоплатеж*
 
-output "lb_ip" {
-  value = [for listener in yandex_lb_network_load_balancer.lb.listener : [for addr in listener.external_address_spec : addr.address][0]][0]
-}
-....
-```
-![задание1](https://github.com/poproshe/netology/blob/main/img/1.png)
-![задание1](https://github.com/poproshe/netology/blob/main/img/2.png)
-![задание1](https://github.com/poproshe/netology/blob/main/img/3.png)
+Триггер запускается по расписанию/порогу баланса.
+Проверка, что платеж не выполнялся сегодня.
+Расчет суммы по лимиту.
+Выполнение транзакции (шаги 1–6 выше).
+Отправка уведомления клиенту.
+При ошибке — повтор через N минут (retry).
+
+### Задание 3. SQL vs NoSQL
+3.1. Пять преимуществ SQL
+Гарантия ACID.
+Строгая схема (контроль типов).
+Мощные сложные запросы (JOIN, агрегации).
+Целостность ссылок (внешние ключи).
+Зрелость, стандартизация и обилие инструментов.
+
+3.1. Преимущества NewSQL*
+Горионтальное масштабирование (как в NoSQL).
+ACID в распределённой среде.
+Автоматическая отказоустойчивость.
+Шардинг без вмешательства разработчика.
+Высокая производительность на больших кластерах.
+
+Задание 4. Кластеры (1000 машин)
+Критерий выбора: Тип нагрузки.
+Для аналитики (OLAP): колоночная СУБД с MPP-архитектурой.
+
+Колоночное хранение экономит I/O, MPP распределяет запросы по всем узлам, потому выбираю ее
+Можно выбрать  ClickHouse или Greenplum.
+Модель вычислений: Massively Parallel Processing (MPP) — даёт линейное ускорение при росте числа машин.
+
+
